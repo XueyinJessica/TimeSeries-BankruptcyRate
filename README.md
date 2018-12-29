@@ -12,3 +12,9 @@ We first did a basic EDA to visualize the series explore the underlying relation
 # Result
 
 The whole training time of four models was less than 3 mins. Our final model is the emsemble of four models, which is the average of their predictions, this gives RMSE 0.19 on test data. We finally ranked top **3** among 22 teams in the class competition. The top 1 solution used ensemble of **10** models of type SARIMA, SARIMAX, VAR and VARX, which I think is not really useful in real life/industry.
+
+# Deliverable
+
+Check the *Data* folder for train and test data
+
+Check the *Rcode* folder for SARIMA and VAR implementation code
