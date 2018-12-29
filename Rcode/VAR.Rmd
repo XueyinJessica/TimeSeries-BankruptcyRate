@@ -1,0 +1,193 @@
+---
+title: "Project2"
+author: "TS hw1"
+date: "12/4/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(forecast)
+library(vars)
+library(readr)
+```
+
+# var modeling
+```{r,message=FALSE}
+data <- read_csv("~/Desktop/timeseries/project/train.csv")
+test <- read_csv("~/Desktop/timeseries/project/test.csv")
+```
+
+## data -> train, validation split
+```{r}
+train <- data[1:300,]
+valid <- data[301:336,]
+x_train <- train[c(2,3,5)]
+y_train <- train[4]
+x_valid <- valid[c(2,3,5)]
+y_valid <- valid[4]
+# train
+x_train_unemply <- ts(x_train$Unemployment_Rate, start = c(1987,1),end = c(2011,12),frequency = 12)
+x_train_popn <- ts(x_train$Population, start = c(1987,1),end = c(2011,12),frequency = 12)
+x_train_priceidx <- ts(x_train$House_Price_Index, start = c(1987,1),end = c(2011,12),frequency = 12)
+y_train_bankrp <- ts(y_train$Bankruptcy_Rate, start = c(1987,1),end = c(2011,12),frequency = 12)
+# valid
+x_valid_unemply <-  ts(x_valid$Unemployment_Rate, start = c(2012,1),end = c(2014,12),frequency = 12)
+x_valid_popn <- ts(x_valid$Population, start = c(2012,1),end = c(2014,12),frequency = 12)
+x_valid_priceidx <- ts(x_valid$House_Price_Index, start = c(2012,1),end = c(2014,12),frequency = 12)
+y_valid_bankrp <- ts(y_valid$Bankruptcy_Rate, start = c(2012,1),end = c(2014,12),frequency = 12)
+# test
+x_test_unemply <-  ts(test$Unemployment_Rate, start = c(2015,1),end = c(2017,12),frequency = 12)
+x_test_popn <- ts(test$Population, start = c(2015,1),end = c(2017,12),frequency = 12)
+x_test_priceidx <- ts(test$House_Price_Index, start = c(2015,1),end = c(2017,12),frequency = 12)
+# combine two csv to (all data we have)
+test$Bankruptcy_Rate <- NA
+comb <- rbind(data,test)
+comb$Unemployment_Rate <-ts(comb$Unemployment_Rate, start = c(1987,1),end = c(2017,12),frequency = 12)
+comb$Population <- ts(comb$Population, start = c(1987,1),end = c(2017,12),frequency = 12)
+comb$House_Price_Index <-ts(comb$House_Price_Index, start = c(1987,1),end = c(2017,12),frequency = 12)
+```
+
+## some EDA
+
+### plot data for bankruptcy (1987 - 2014) we have,
+
+```{r}
+data$Bankruptcy_Rate = ts(data$Bankruptcy_Rate, start = c(1987,1),end = c(2014,12),frequency = 12)
+plot(data$Bankruptcy_Rate,main = "Bankruptcy_Rate 1987-2014")
+lines(y_valid_bankrp,col="red",lwd=2)
+for (i in 1988:2014){ 
+  abline(v=i,col='blue',lty=2)
+}
+legend("topleft", legend = c("Train", "Validation"), lty = 1, col = c("black", "red"), cex = 0.9,lwd=c(1,2))
+```
+
+There are clearly 2 spikes at 1997,2009, perhaps due to the **financial crisis** on 1997 and 2008.
+
+The series has a pattern: increasing at certain year, then keep horizontal, but when it keeps horizontal, there is a seasonal pattern within those years, so we should consider seasonal effect.
+
+The possible problem is, as we can see, the local validation set has a small **jump** to previous series. For future data of 3 years, there might be no such **jump**, so we might consider small window data to train.
+
+### check the other exogenous features
+```{r}
+ts.plot(comb$Unemployment_Rate,main="Unemployment_Rate 1987 - 2017")
+lines(x_valid_unemply,col="red",lwd=2)
+lines(x_test_unemply,col="blue",lwd=2)
+legend("topright", legend = c("Train", "Validation","Test"), lty = 1, col = c("black", "red","blue"), cex = 0.9,lwd=c(1,2,2))
+```
+```{r}
+ts.plot(comb$Population,main="Population 1987 - 2017")
+lines(x_valid_popn,col="red",lwd=2)
+lines(x_test_popn,col="blue",lwd=2)
+legend("bottomright", legend = c("Train", "Validation","Test"), lty = 1, col = c("black", "red","blue"), cex = 0.9,lwd=c(1,2,2))
+```
+```{r}
+ts.plot(comb$House_Price_Index,main="House_Price_Index 1987 - 2017")
+lines(x_valid_priceidx,col="red",lwd=2)
+lines(x_test_priceidx ,col="blue",lwd=2)
+legend("bottomright", legend = c("Train", "Validation","Test"), lty = 1, col = c("black", "red","blue"), cex = 0.9,lwd=c(1,2,2))
+```
+
+The validation set follows some pattern as the train, and it is reasonable to treat them as endogenous.
+
+The test set also follows the same pattern as before, no big difference, so they are good predictors to use directly.
+
+```{r}
+# Let's fit a few models with all 4 variables, p =1,2,3
+# What order p should we use? 
+# VARselect(y = data.frame(x_train_unemply,x_train_popn,y_train_bankrp,x_train_priceidx))
+# 10 is not reasonable
+var_4_m1 = VAR(y = data.frame(x_train_unemply,x_train_popn,y_train_bankrp,x_train_priceidx), p = 1,season = 12)
+var_4_m2 = VAR(y = data.frame(x_train_unemply,x_train_popn,y_train_bankrp,x_train_priceidx), p = 2,season = 12)
+var_4_m3 = VAR(y = data.frame(x_train_unemply,x_train_popn,y_train_bankrp,x_train_priceidx), p = 3,season = 12)
+# Let's now do some forecasting with this model
+pred_4_m1 <- predict(var_4_m1, n.ahead = 36, ci = 0.95)
+pred_4_m2 <- predict(var_4_m2, n.ahead = 36, ci = 0.95)
+pred_4_m3 <- predict(var_4_m3, n.ahead = 36, ci = 0.95)
+# check their performance on validation set
+rmse.var_4_m1  <- sqrt(mean((pred_4_m1$fcst$y_train_bankrp[,1]-y_valid_bankrp)^2))# 0.2675
+rmse.var_4_m2  <- sqrt(mean((pred_4_m2$fcst$y_train_bankrp[,1]-y_valid_bankrp)^2))# 0.257
+rmse.var_4_m3  <- sqrt(mean((pred_4_m3$fcst$y_train_bankrp[,1]-y_valid_bankrp)^2))# 0.249
+```
+
+Looks p = 3 and with all 3 endogenous variable is the best,
+
+But, back to previous plot, we see there is an expoential increasing from 1987 to 1995, then there is an linear trend, so we might exclude those expoential data series.
+
+```{r}
+# new train
+x_trainnew_unemply <- ts(x_train$Unemployment_Rate[48:300], start = c(1991,1),end = c(2011,12),frequency = 12)
+x_trainnew_popn <- ts(x_train$Population[48:300], start = c(1991,1),end = c(2011,12),frequency = 12)
+x_trainnew_priceidx <- ts(x_train$House_Price_Index[48:300], start = c(1991,1),end = c(2011,12),frequency = 12)
+y_trainnew_bankrp <- ts(y_train$Bankruptcy_Rate[48:300], start = c(1991,1),end = c(2011,12),frequency = 12)
+```
+
+```{r}
+plot(y_trainnew_bankrp,main = "Bankruptcy_Rate for 1991 to 2011")
+```
+
+The training looks more reasonable.
+
+build VAR(3) now
+```{r}
+var_4_m4 <- VAR(y = data.frame(x_trainnew_unemply,x_trainnew_popn,y_trainnew_bankrp,x_trainnew_priceidx), p = 3,season = 12)
+pred_4_m4 <- predict(var_4_m4, n.ahead = 36, ci = 0.95)
+rmse.var_4_m4  <- sqrt(mean((pred_4_m4$fcst$y_trainnew_bankrp[,1]-y_valid_bankrp)^2))# 0.32174
+```
+
+it is actually getting worse
+```{r}
+#define a financial cris variable?
+new <- c(rep(0,60),rep(1,12),rep(0,120),rep(1,24),rep(0,36))
+new <- ts(new,start = c(1991,1),end = c(2011,12),frequency = 12)
+# it also gives worse result
+# end with first VAR(3)
+```
+
+## re-build VAR(3) on whole training
+```{r}
+# create "data" level variable
+unemp <- ts(data$Unemployment_Rate,start = c(1987,1),end = c(2014,12),frequency = 12)
+pop <- ts(data$Population,start = c(1987,1),end = c(2014,12),frequency = 12)
+hpi <- ts(data$House_Price_Index,start = c(1987,1),end = c(2014,12),frequency = 12)
+br <- ts(data$Bankruptcy_Rate,start = c(1987,1),end = c(2014,12),frequency = 12)
+var_4_final = VAR(y = data.frame(unemp,pop,hpi,br), p = 3,season = 12)
+# submit prediction 
+pred_var_final <- predict(var_4_final, n.ahead = 36, ci = 0.95)
+prediction <- pred_var_final$fcst$br[,1]
+```
+```{r}
+plot(br, main = "VAR(3) built by all past data",xlim=c(1987,2018))
+ts_prediction <- ts(prediction,start = c(2015,1),end = c(2017,12),frequency = 12)
+lines(ts_prediction,col="red")
+legend("topleft", legend = c("Series for 1987-2014","Prediction for 2015-2017"), lty = 1, col = c("black", "red"), cex = 0.9,lwd=c(1,2))
+```
+
+## re-build VAR(3) on data after 2010 (small window level)
+
+```{r}
+# create "data" level variable
+unemp2 <- ts(tail(data$Unemployment_Rate,60),start = c(2010,1),end = c(2014,12),frequency = 12)
+pop2 <- ts(tail(data$Population,60),start = c(2010,1),end = c(2014,12),frequency = 12)
+hpi2 <- ts(tail(data$House_Price_Index,60),start = c(2010,1),end = c(2014,12),frequency = 12)
+br2 <- ts(tail(data$Bankruptcy_Rate,60),start = c(2010,1),end = c(2014,12),frequency = 12)
+var_4_final2 = VAR(y = data.frame(unemp2,pop2,hpi2,br2), p = 3,season = 12)
+# submit prediction 
+pred_var_final2 <- predict(var_4_final2, n.ahead = 36, ci = 0.95)
+prediction2 <- pred_var_final2$fcst$br[,1]
+```
+
+```{r}
+plot(br,main = "VAR(3) built by past 5 years data",xlim=c(1987,2018))
+ts_prediction2 <- ts(prediction2,start = c(2015,1),end = c(2017,12),frequency = 12)
+lines(ts_prediction2,col="red")
+legend("topleft", legend = c("Series for 1987-2014","Prediction(small VAR(3)) for 2015-2017"), lty = 1, col = c("black", "red"), cex = 0.9,lwd=c(1,2))
+```
+
+what if take the average to enseamble those two model:
+```{r}
+plot(br,main = "VAR(3) built by past 5 years data",xlim=c(1987,2018))
+avg_pred <-ts((prediction+prediction2)/2,start = c(2015,1),end = c(2017,12),frequency = 12)
+lines(avg_pred,col="red")
+legend("topleft", legend = c("Series for 1987-2014","Prediction(avg of 2 Models) for 2015-2017"), lty = 1, col = c("black", "red"), cex = 0.9,lwd=c(1,2))
+```
+
