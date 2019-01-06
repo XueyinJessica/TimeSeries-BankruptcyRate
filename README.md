@@ -15,6 +15,6 @@ The whole training time of four models was less than 3 mins. Our final model is 
 
 # Deliverable
 
-Check the **Data** folder for train and test data
+Check the [**Data**](./data) folder for train and test data
 
-Check the **Rcode** folder for SARIMA and VAR implementation code
+Check the [**Rcode**](./Rcode) folder for SARIMA and VAR implementation code
